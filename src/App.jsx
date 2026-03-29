@@ -18,9 +18,10 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(null);
 
-  // NEW: State for our search and filter
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAuthor, setSelectedAuthor] = useState("All");
+  // NEW: State for sorting
+  const [sortBy, setSortBy] = useState("title");
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) =>
@@ -31,20 +32,20 @@ function App() {
 
   const handleDeleteBook = async (id) => {
     if (window.confirm("Remove this book from your garden?")) {
-      setIsProcessing(id); // Set the ID of the book being deleted
+      setIsProcessing(id);
       try {
         const bookDoc = doc(db, "books", id);
         await deleteDoc(bookDoc);
       } catch (error) {
         console.error(error);
       } finally {
-        setIsProcessing(null); // Clear loading state
+        setIsProcessing(null);
       }
     }
   };
 
   const handleToggleRead = async (id, currentStatus) => {
-    setIsProcessing(id); // Set the ID of the book being toggled
+    setIsProcessing(id);
     try {
       const bookDoc = doc(db, "books", id);
       await updateDoc(bookDoc, { isRead: !currentStatus });
@@ -83,26 +84,32 @@ function App() {
     }
   };
 
-  // NEW: Extract a unique list of authors for the dropdown
   const uniqueAuthors = useMemo(() => {
     const authors = books.map((book) => book.author);
     return ["All", ...new Set(authors)];
   }, [books]);
 
-  // NEW: Filter the books based on the search query and selected author
+  // UPDATED: Filter AND Sort the books
   const filteredBooks = useMemo(() => {
-    return books.filter((book) => {
-      const matchesSearch = book.title
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      const matchesAuthor =
-        selectedAuthor === "All" || book.author === selectedAuthor;
-      return matchesSearch && matchesAuthor;
-    });
-  }, [books, searchQuery, selectedAuthor]);
+    return books
+      .filter((book) => {
+        const matchesSearch = book.title
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase());
+        const matchesAuthor =
+          selectedAuthor === "All" || book.author === selectedAuthor;
+        return matchesSearch && matchesAuthor;
+      })
+      .sort((a, b) => {
+        if (sortBy === "title") {
+          return a.title.localeCompare(b.title);
+        } else {
+          return a.author.localeCompare(b.author);
+        }
+      });
+  }, [books, searchQuery, selectedAuthor, sortBy]);
 
   return (
-    // REDUCED PADDING: Changed p-8 to p-4, but added sm:p-8 for PC
     <div className="min-h-screen p-4 sm:p-8 pb-20 font-sans relative overflow-hidden garden-background-wrapper">
       <div className="max-w-7xl w-full mx-auto relative z-10">
         <div className="flex flex-row justify-between items-start gap-4 mb-6 sm:mb-10">
@@ -111,7 +118,6 @@ function App() {
           </h1>
 
           {user ? (
-            /* BUTTON GROUP: Forced to row, but allowed to wrap if space runs out */
             <div className="flex flex-row flex-wrap justify-end gap-2 sm:gap-4 max-w-[180px] sm:max-w-none">
               <button
                 onClick={() => setIsModalOpen(true)}
@@ -137,9 +143,7 @@ function App() {
           )}
         </div>
 
-        {/* WHITE CARD: Reduced mobile padding from p-8 to p-4 */}
         <div className="bg-white/90 backdrop-blur-md rounded-[2rem] p-4 sm:p-8 shadow-xl border border-white/50 min-h-[500px]">
-          {/* SEARCH & FILTER: Kept the flex-col for mobile, added w-full */}
           {books.length > 0 && (
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-pink-100">
               <input
@@ -149,17 +153,31 @@ function App() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-1 border border-pink-100 bg-pink-50/30 rounded-xl p-3 outline-none focus:border-pink-300 focus:bg-white transition-all text-slate-700 w-full"
               />
-              <select
-                value={selectedAuthor}
-                onChange={(e) => setSelectedAuthor(e.target.value)}
-                className="border border-pink-100 bg-pink-50/30 rounded-xl p-3 outline-none focus:border-pink-300 focus:bg-white transition-all text-slate-700 cursor-pointer w-full sm:w-64 appearance-none"
-              >
-                {uniqueAuthors.map((author) => (
-                  <option key={author} value={author}>
-                    {author === "All" ? "All Authors" : author}
-                  </option>
-                ))}
-              </select>
+
+              {/* Filter Group for Mobile side-by-side */}
+              <div className="flex gap-2 w-full sm:w-auto">
+                <select
+                  value={selectedAuthor}
+                  onChange={(e) => setSelectedAuthor(e.target.value)}
+                  className="flex-1 sm:w-64 border border-pink-100 bg-pink-50/30 rounded-xl p-3 outline-none focus:border-pink-300 focus:bg-white transition-all text-slate-700 cursor-pointer appearance-none"
+                >
+                  {uniqueAuthors.map((author) => (
+                    <option key={author} value={author}>
+                      {author === "All" ? "All Authors" : author}
+                    </option>
+                  ))}
+                </select>
+
+                {/* NEW: Sort Dropdown */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="flex-1 sm:w-40 border border-pink-100 bg-pink-50/30 rounded-xl p-3 outline-none focus:border-pink-300 focus:bg-white transition-all text-slate-700 cursor-pointer appearance-none font-medium"
+                >
+                  <option value="title">Sort: Title</option>
+                  <option value="author">Sort: Author</option>
+                </select>
+              </div>
             </div>
           )}
 
@@ -172,7 +190,6 @@ function App() {
         </div>
       </div>
 
-      {/* MODAL OVERLAY: (Kept the same) */}
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
