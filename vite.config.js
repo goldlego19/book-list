@@ -5,5 +5,5 @@ import tailwindcss from "@tailwindcss/vite";
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: "/booklist/", // Keep this here for your GitHub Pages deployment!
+  base: "/book-list/", // Keep this here for your GitHub Pages deployment!
 });
