@@ -1,1 +1,12 @@
+@import url("https://fonts.googleapis.com/css2?family=Leckerli+One&display=swap");
 @import "tailwindcss";
+
+.garden-background-wrapper {
+  background-color: #f2ceef;
+  background-image: url("/1667.jpg");
+  background-repeat: repeat;
+  background-position: center;
+  background-size: 400px;
+  background-blend-mode: multiply;
+  opacity: 0.9;
+}

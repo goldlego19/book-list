@@ -1,121 +1,194 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useEffect, useMemo } from "react";
+import {
+  collection,
+  onSnapshot,
+  deleteDoc,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { db, auth, provider } from "./firebase";
+import { motion, AnimatePresence } from "framer-motion";
+import AddBookForm from "./components/AddBookForm";
+import BookList from "./components/BookList";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [books, setBooks] = useState([]);
+  const [user, setUser] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(null);
+
+  // NEW: State for our search and filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedAuthor, setSelectedAuthor] = useState("All");
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) =>
+      setUser(currentUser),
+    );
+    return () => unsubscribeAuth();
+  }, []);
+
+  const handleDeleteBook = async (id) => {
+    if (window.confirm("Remove this book from your garden?")) {
+      setIsProcessing(id); // Set the ID of the book being deleted
+      try {
+        const bookDoc = doc(db, "books", id);
+        await deleteDoc(bookDoc);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsProcessing(null); // Clear loading state
+      }
+    }
+  };
+
+  const handleToggleRead = async (id, currentStatus) => {
+    setIsProcessing(id); // Set the ID of the book being toggled
+    try {
+      const bookDoc = doc(db, "books", id);
+      await updateDoc(bookDoc, { isRead: !currentStatus });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  useEffect(() => {
+    const booksCollectionRef = collection(db, "books");
+    const unsubscribeDb = onSnapshot(booksCollectionRef, (snapshot) => {
+      const booksData = snapshot.docs.map((doc) => ({
+        ...doc.data(),
+        id: doc.id,
+      }));
+      setBooks(booksData);
+    });
+    return () => unsubscribeDb();
+  }, []);
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // NEW: Extract a unique list of authors for the dropdown
+  const uniqueAuthors = useMemo(() => {
+    const authors = books.map((book) => book.author);
+    return ["All", ...new Set(authors)];
+  }, [books]);
+
+  // NEW: Filter the books based on the search query and selected author
+  const filteredBooks = useMemo(() => {
+    return books.filter((book) => {
+      const matchesSearch = book.title
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
+      const matchesAuthor =
+        selectedAuthor === "All" || book.author === selectedAuthor;
+      return matchesSearch && matchesAuthor;
+    });
+  }, [books, searchQuery, selectedAuthor]);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    // REDUCED PADDING: Changed p-8 to p-4, but added sm:p-8 for PC
+    <div className="min-h-screen p-4 sm:p-8 pb-20 font-sans relative overflow-hidden garden-background-wrapper">
+      <div className="max-w-7xl w-full mx-auto relative z-10">
+        <div className="flex flex-row justify-between items-start gap-4 mb-6 sm:mb-10">
+          <h1 className="text-2xl sm:text-5xl text-left text-white drop-shadow-sm font-['Leckerli_One'] tracking-tight sm:tracking-wide [-webkit-text-stroke:1px_black] leading-tight max-w-[150px] sm:max-w-none">
+            My Library
+          </h1>
 
-      <div className="ticks"></div>
+          {user ? (
+            /* BUTTON GROUP: Forced to row, but allowed to wrap if space runs out */
+            <div className="flex flex-row flex-wrap justify-end gap-2 sm:gap-4 max-w-[180px] sm:max-w-none">
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-white text-[#d496cf] text-[10px] sm:text-base font-bold px-3 sm:px-5 py-2 rounded-full shadow-md hover:shadow-lg transition-all active:scale-95 whitespace-nowrap"
+              >
+                + Add Book
+              </button>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+              <button
+                onClick={handleSignOut}
+                className="bg-white text-[#d496cf] text-[10px] sm:text-base font-bold px-3 sm:px-5 py-2 rounded-full shadow-md hover:shadow-lg transition-all active:scale-95 whitespace-nowrap"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleSignIn}
+              className="bg-white text-[#d496cf] font-bold px-6 py-2 rounded-full shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-95"
+            >
+              Sign In
+            </button>
+          )}
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        {/* WHITE CARD: Reduced mobile padding from p-8 to p-4 */}
+        <div className="bg-white/90 backdrop-blur-md rounded-[2rem] p-4 sm:p-8 shadow-xl border border-white/50 min-h-[500px]">
+          {/* SEARCH & FILTER: Kept the flex-col for mobile, added w-full */}
+          {books.length > 0 && (
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-pink-100">
+              <input
+                type="text"
+                placeholder="Search by title..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 border border-pink-100 bg-pink-50/30 rounded-xl p-3 outline-none focus:border-pink-300 focus:bg-white transition-all text-slate-700 w-full"
+              />
+              <select
+                value={selectedAuthor}
+                onChange={(e) => setSelectedAuthor(e.target.value)}
+                className="border border-pink-100 bg-pink-50/30 rounded-xl p-3 outline-none focus:border-pink-300 focus:bg-white transition-all text-slate-700 cursor-pointer w-full sm:w-64 appearance-none"
+              >
+                {uniqueAuthors.map((author) => (
+                  <option key={author} value={author}>
+                    {author === "All" ? "All Authors" : author}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <BookList
+            books={filteredBooks}
+            onDelete={handleDeleteBook}
+            onToggleRead={handleToggleRead}
+            processingId={isProcessing}
+          />
+        </div>
+      </div>
+
+      {/* MODAL OVERLAY: (Kept the same) */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsModalOpen(false)}
+              className="absolute inset-0 bg-black/20 backdrop-blur-sm cursor-pointer"
+            />
+            <AddBookForm onClose={() => setIsModalOpen(false)} />
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
-export default App
+export default App;
